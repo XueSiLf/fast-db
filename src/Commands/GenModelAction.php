@@ -13,7 +13,6 @@ namespace EasySwoole\FastDb\Commands;
 
 use EasySwoole\Command\Color;
 use EasySwoole\Command\CommandManager;
-use EasySwoole\EasySwoole\Command\CommandInterface;
 use EasySwoole\FastDb\Config;
 use EasySwoole\FastDb\Exception\RuntimeError;
 use EasySwoole\FastDb\FastDb;
@@ -23,46 +22,48 @@ use Swoole\Timer;
 
 class GenModelAction implements ActionInterface
 {
+    private function runAction()
+    {
+        $commandManager = CommandManager::getInstance();
+        $table = $commandManager->getOpt('table');
+        if (!$table) {
+            return Color::danger("The option param 'table' missed!");
+        }
+
+        $connectionName = $commandManager->getOpt('db-connection');
+        if (!$connectionName) {
+            $connectionName = 'default';
+        }
+
+        $path = $commandManager->getOpt('path');
+        if (!$path) {
+            $path = 'App/Model';
+        }
+
+        $columns = $this->formatColumns($this->getColumnTypeListing($connectionName, $table));
+        $project = new Project();
+        $class = $this->studly($table);
+        $class = $project->getNamespace($path) . $class;
+        $filepath = getcwd() . DIRECTORY_SEPARATOR . $project->path($class);
+        if (!file_exists($filepath)) {
+            $this->mkdir($filepath);
+        }
+
+        file_put_contents($filepath, $this->buildClass($table, $class, $connectionName, $columns));
+        echo Color::success("Model {$class} was created.") . "\n";
+        Timer::clearAll();
+        return null;
+    }
+
     public function run(): ?string
     {
-        Coroutine\run(function () {
-            $commandManager = CommandManager::getInstance();
-            $table = $commandManager->getOpt('table');
-            if (!$table) {
-                return Color::danger("The option param 'table' missed!");
-            }
-            $connectionName = $commandManager->getOpt('db-connection');
-            if (!$connectionName) {
-                $connectionName = 'default';
-            }
-            $path = $commandManager->getOpt('path');
-            if (!$path) {
-                $path = 'App/Model';
-            }
-            try {
-                $columns = $this->formatColumns($this->getColumnTypeListing($connectionName, $table));
-            } catch (\Throwable $throwable) {
-                echo Color::red($throwable->getMessage()) . "\n";
-                echo Color::red("Stack trace:") . "\n";
-                echo Color::red($throwable->getTraceAsString()) . "\n";
-                echo Color::red("  thrown in " . $throwable->getFile() . " on line " . $throwable->getLine()) . "\n";
-                Timer::clearAll();
-                return null;
-            }
-
-            $project = new Project();
-            $class = $this->studly($table);
-            $class = $project->getNamespace($path) . $class;
-            $filepath = getcwd() . DIRECTORY_SEPARATOR . $project->path($class);
-            if (!file_exists($filepath)) {
-                $this->mkdir($filepath);
-            }
-
-            file_put_contents($filepath, $this->buildClass($table, $class, $connectionName, $columns));
-            echo Color::success("Model {$class} was created.") . "\n";
-            Timer::clearAll();
-            return null;
-        });
+        if (Coroutine::getCid() > 0) {
+            $this->runAction();
+        } else {
+            Coroutine\run(function () {
+                $this->runAction();
+            });
+        }
 
         return null;
     }
@@ -102,8 +103,7 @@ class GenModelAction implements ActionInterface
         $sql = 'select `column_key` as `column_key`, `column_name` as `column_name`, `data_type` as `data_type`, `is_nullable` as `is_nullable`, `column_comment` as `column_comment`, `extra` as `extra`, `column_type` as `column_type` from information_schema.columns where `table_schema` = ? and `table_name` = ? order by ORDINAL_POSITION';
         $builder = new QueryBuilder();
         $builder->raw($sql, [$fastDbConfig->getDatabase(), $table]);
-
-        return FastDb::getInstance()->selectConnection($connectionName)->query($builder)->getResult();
+        return FastDb::getInstance()->query($builder)->getResult();
     }
 
     private function studly(string $value, string $gap = ''): string
