@@ -35,9 +35,9 @@ final class ModelTest extends BaseTestCase
         FastDb::getInstance()->addDb($configObj);
         FastDb::getInstance()->setOnQuery(function (QueryResult $queryResult) {
             if ($queryResult->getQueryBuilder()) {
-                echo $queryResult->getQueryBuilder()->getLastQuery() . "\n";
+//                echo $queryResult->getQueryBuilder()->getLastQuery() . "\n";
             } else {
-                echo $queryResult->getRawSql() . "\n";
+//                echo $queryResult->getRawSql() . "\n";
             }
         });
     }
