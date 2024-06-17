@@ -111,11 +111,13 @@ class FastDb
     function selectConnection(?string $name = null):static|string
     {
         $cid = Coroutine::getCid();
-        if($name && !isset($this->selectConnection[$cid])){
+        if(!empty($name)){
+            if(!isset($this->selectConnection[$cid])){
+                Coroutine::defer(function ()use($cid){
+                    unset($this->selectConnection[$cid]);
+                });
+            }
             $this->selectConnection[$cid] = $name;
-            Coroutine::defer(function ()use($cid){
-                unset($this->selectConnection[$cid]);
-            });
             return $this;
         }
         if(isset($this->selectConnection[$cid])){
